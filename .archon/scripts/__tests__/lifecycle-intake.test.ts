@@ -168,6 +168,10 @@ describe('lifecycle backlog intake', () => {
     );
   });
 
+  it('orders issue numbers numerically across pages', () => {
+    selected({ label: 'factory', issues: [[issue(10)], [issue(9)]], prs: [] }, 9);
+  });
+
   it('excludes references on later PR pages', () => {
     selected(
       {
