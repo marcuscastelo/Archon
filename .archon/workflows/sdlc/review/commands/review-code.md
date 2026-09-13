@@ -17,6 +17,20 @@ Comments clarify functionality and how code is used, and they stay current when 
 
 Report a comment defect only when the changed prose creates the same concrete maintenance or supported-use consequence required by the evidence bar above. Quote the prose and the contradicting behavior. A self-explanatory changed comment is a repository-rule violation: request its removal or editing, never additional narration.
 
+## UI evidence is part of correctness
+
+When the diff changes a user-visible screen, component, layout, style, or
+interaction, require `$ARTIFACTS_DIR/visual-evidence.json` and verify it against
+the actual merge-base and reviewed head. Both referenced PNGs must exist under
+`$ARTIFACTS_DIR/visual/`, be readable, and depict the same route, application
+state, and viewport before and after. Inspect both images. A post-change state
+shown twice, two different states, a test-only stand-in, a local path not
+uploaded to the PR, or evidence for a different head is an Important defect.
+The smallest correction is to render the merge-base in a separate temporary
+worktree, render the reviewed head under identical conditions, and attach both
+verified files to the PR. When the diff has no user-visible UI effect, this
+requirement does not apply.
+
 ## Scope of reading
 
 Leave the diff far enough to understand the changed behavior: read full changed files, direct callers, consumers, and tests — at most two hops from changed lines. Read the repo's steering files before judging rule violations. Do not audit unrelated code; a pre-existing defect is reportable only if this change makes it reachable, worsens it, or claims to fix it without doing so.

@@ -29,6 +29,11 @@ inputs:
       "true" lets triage write its proposed label set to the resolved GitHub
       issue. "false" stays advisory; other values are rejected. Forwarded
       unchanged to triage.
+  post_ready_checks:
+    default: ""
+    description: >-
+      Comma-separated checks that must start after the PR becomes ready and
+      conclude successfully. Forwarded unchanged to delivery.
 
 returns: outcome
 
@@ -84,6 +89,7 @@ nodes:
     include: archon-deliver
     with:
       errors: "$INPUTS.errors"
+      post_ready_checks: "$INPUTS.post_ready_checks"
       work: >-
         Deliver the work prepared by this run. Read $ARTIFACTS_DIR/triage.md
         first. When present, plan.md or investigation.md is the detailed work

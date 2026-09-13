@@ -35,6 +35,12 @@ inputs:
   errors:
     default: "auto"
     description: Silent-failure lens — auto, true, or false.
+  post_ready_checks:
+    default: ""
+    description: >-
+      Comma-separated check names that must start after this workflow changes
+      the PR from draft to ready and then conclude successfully. Empty disables
+      this project-specific gate.
 
 # The returns node is what a composed dependency on this workflow resolves to,
 # and what a caller's binding of this workflow's output reads. Both must mean
@@ -594,6 +600,21 @@ nodes:
           exit 1
         fi
       fi
+      # Record the head and the instant immediately before the transition. A
+      # required integration check from the draft phase is stale evidence even
+      # when GitHub still displays it on this same head.
+      if ! READY_HEAD=$(gh pr view "$PR_NUMBER" --repo "$ORIGIN_REPO" --json headRefOid --jq .headRefOid 2>/dev/null); then
+        printf '%s\n' "flip-ready: could not read the PR head before the ready transition." >&2
+        exit 1
+      fi
+      if ! gh pr view "$PR_NUMBER" --repo "$ORIGIN_REPO" --json statusCheckRollup > "$ARTIFACTS_DIR/pre-ready-checks.json" 2>/dev/null; then
+        printf '%s\n' "flip-ready: could not record the checks present before the ready transition." >&2
+        exit 1
+      fi
+      READY_AFTER=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+      mkdir -p "$ARTIFACTS_DIR"
+      printf '{"ready_after":"%s","head":"%s"}\n' "$READY_AFTER" "$READY_HEAD" > "$ARTIFACTS_DIR/ready-marker.json"
+
       # The flip prints a confirmation this node has no use for, and its stdout is
       # not a value, so both streams are captured together and re-emitted only if
       # the flip failed — where gh's own words are the diagnostic.
@@ -636,8 +657,35 @@ nodes:
        gate-validated, gate-ready, validate]
     trigger_rule: none_failed_min_one_success
 
+  # Some integrations deliberately skip while a PR is draft and start only
+  # after the ready transition. Their earlier status cannot satisfy this gate.
+  # The probe binds the exact PR, head, and marker written by flip-ready; a
+  # checks.complete event wakes the durable wait, with a deadline as fallback.
+  - id: post-ready-checks
+    loop_group:
+      max_iterations: 13
+      until_bash: test $post-ready-probe.output.state = "concluded"
+      nodes:
+        - id: post-ready-probe
+          script: check-post-ready
+          runtime: uv
+          with:
+            repo: "$pr.output.repo.path"
+            pr_number: "$pr.output.number"
+            marker: "$ARTIFACTS_DIR/ready-marker.json"
+            pre_ready_checks: "$ARTIFACTS_DIR/pre-ready-checks.json"
+            required_checks: "$INPUTS.post_ready_checks"
+        - id: post-ready-pause
+          wait:
+            event: checks.complete
+            deadline_ms: 300000
+          when: $post-ready-probe.output.state == 'pending'
+          depends_on: [post-ready-probe]
+    depends_on: [flip-ready]
+
   # This tail's terminal report, like every other SDLC tail's (scripts/outcome.py).
-  # flip-ready owns the one irreversible public action and stops there; composing
+  # flip-ready owns the one irreversible public action. The post-ready gate must
+  # settle before the terminal report can expose the PR as delivered; composing
   # the text its reader receives is separate work, and a named script keeps it out
   # of a bash body that would otherwise need a python interpreter Windows hosts do
   # not reliably have.
@@ -646,4 +694,4 @@ nodes:
     runtime: uv
     with:
       pr_url: "$flip-ready.output"
-    depends_on: [flip-ready]
+    depends_on: [flip-ready, post-ready-checks]

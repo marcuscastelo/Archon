@@ -34,6 +34,13 @@ recorded number as the selector for every `gh` read or edit.
    was written, and a reviewer must not have to discover that from a red badge.
 5. After an edit, read the body back (`gh pr view`) and confirm it carries your
    corrections.
+6. If `$ARTIFACTS_DIR/visual-evidence.json` exists, apply the same validation,
+   attachment, and read-back contract as the `archon-pr` command: validate both
+   baseline/current PNGs and matching route, state, and viewport; replace any
+   older `<!-- archon-visual-evidence ... -->` section; upload both files with
+   `gh pr edit --attach`; then download both GitHub-hosted URLs and verify their
+   SHA-256 digests match the local files. A correction that changes the PR head
+   must not leave evidence for an earlier head.
 
 Before finishing, re-read the final body once against the diff: every mechanism
 it describes must be one the diff actually contains.

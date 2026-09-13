@@ -62,10 +62,11 @@ ship__deliver__validate__validate:
   red_cause: ""
   summary: "stub: checks green"
 ship__deliver__gate-validated: "green"
-ship__deliver__await-checks: "concluded"
+ci-probe: '{"state":"concluded","detail":"all checks green"}'
 ship__deliver__ci-verdict: '{"state":"green","detail":""}'
 ship__deliver__ci-attention-route: '{"attention":"false","red_cause":""}'
 ship__deliver__flip-ready: "https://github.com/example/app/pull/7"
+post-ready-probe: '{"state":"concluded","detail":"no post-ready checks required"}'
 ship__deliver__outcome: "delivered"
 ship__outcome: "delivered https://github.com/example/app/pull/7"
 candidate:

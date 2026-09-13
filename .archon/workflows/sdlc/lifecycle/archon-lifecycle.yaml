@@ -17,6 +17,11 @@ inputs:
     description: >-
       Forwarded to triage. "true" writes the proposed state label to the issue,
       which is what marks it as touched for backlog intake.
+  post_ready_checks:
+    default: ''
+    description: >-
+      Comma-separated checks that must start after the PR becomes ready and
+      conclude successfully. Forwarded to every delivery attempt.
   scenario:
     required: true
     description: Absolute path to a project runtime scenario JSON.
@@ -66,6 +71,7 @@ nodes:
     with:
       target: "$intake.output.target"
       publish: "$INPUTS.publish"
+      post_ready_checks: "$INPUTS.post_ready_checks"
 
   - id: candidate
     command: bind-delivered-pr
@@ -119,6 +125,7 @@ nodes:
     depends_on: [qualify]
     when: "$qualify.output.repair == true"
     with:
+      post_ready_checks: "$INPUTS.post_ready_checks"
       work: >-
         Repair the existing PR on this same branch using the concrete runtime
         findings in $qualify.output.evidence. Preserve the original work order in

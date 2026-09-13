@@ -31,6 +31,13 @@ Otherwise determine the base branch from evidence, in order: the repository's do
 - Link the issue with `Closes #N` only when the PR fully resolves it; `Relates to #N` otherwise. Never infer linkage from a bare number.
 - Never add AI attribution, generated-by footers, or robot emoji.
 - If `$ARTIFACTS_DIR/red-causes.json` exists, this branch is being delivered while a project check is red. Add a short, plainly-titled section near the top of the body giving each record's cause and the evidence for it from `implementation.md`, and say that the PR's own CI is the check that still decides. A reviewer must not have to discover this from a red badge.
+- If `$ARTIFACTS_DIR/visual-evidence.json` exists, parse it and verify its exact
+  schema, both absolute paths, PNG signatures, non-empty files, 40-character
+  SHAs, and identical route, state, and viewport. Both paths must resolve under
+  `$ARTIFACTS_DIR/visual/`; refuse traversal or symlinks that escape it. Add a
+  `Visual evidence` section carrying
+  `<!-- archon-visual-evidence head=<after.sha> -->`, the before/after revision,
+  route, state, and viewport. The image uploads themselves happen in step 4.
 - If you write the body to a file, put it under `$ARTIFACTS_DIR/` — never inside the repository.
 
 ## 4. Push and create
@@ -39,10 +46,25 @@ Push the recorded branch with upstream tracking (`git push -u origin "$HEAD_BRAN
 
 If step 1 found an existing PR, preserve its draft state and reuse it after pushing. Otherwise create the PR against the resolved base, honoring draft mode, with `--head "$HEAD_BRANCH"`. Pin every PR command to the recorded origin repository with `--repo "$REPO_PATH"`; a fork clone's CLI default can target its upstream parent instead.
 
+When validated visual evidence exists, pass both files to the same create or
+edit operation with one `--attach <before.path>` and one `--attach <after.path>`.
+For a reused PR, first remove any older `archon-visual-evidence` section and its
+attachments from the body so a correction cannot leave screenshots from an old
+head beside the current claim. Never upload only one side. `gh` must upload the
+local files to GitHub; a local path in the body is not evidence a reviewer can
+open.
+
 ## 5. Verify by reading back
 
 Read the target PR back from GitHub by its explicit number and `--repo "$REPO_PATH"`: confirm repository identity, number, URL, title, base, head, and draft state match what you intended. The read-back head must equal `HEAD_BRANCH`; a repository or branch mismatch is a hard failure. Not done until the read-back agrees.
 
-Write `$ARTIFACTS_DIR/pr-action.md` with `REPO_HOST`, `REPO_PATH`, the recorded branch, the explicit push target, the PR number, and the create-or-reuse and read-back results. Do not put credentials or the raw origin URL in it. This is the durable action evidence; the node's typed output preserves the verified PR identity.
+When visual evidence exists, also confirm the body contains the marker for the
+manifest's `after.sha` and two distinct GitHub-hosted attachment URLs after that
+marker. Download both URLs to `$ARTIFACTS_DIR/visual/readback/`, verify both PNG
+signatures, and compare their SHA-256 digests to the local before and after
+files. A missing, duplicated, inaccessible, or byte-different upload is a hard
+failure.
+
+Write `$ARTIFACTS_DIR/pr-action.md` with `REPO_HOST`, `REPO_PATH`, the recorded branch, the explicit push target, the PR number, and the create-or-reuse and read-back results. When visual evidence exists, include both local SHA-256 digests, both GitHub attachment URLs, and the successful download comparison. Do not put credentials or the raw origin URL in it. This is the durable action evidence; the node's typed output preserves the verified PR identity.
 
 Return the verified record through the node's structured output, with exactly these fields: `repo` (`{ "host": REPO_HOST, "path": REPO_PATH }`), `number` (integer), `url`, `head`, `base`, and `is_draft` (boolean). This record is the run's authority for every later push, PR edit, comment, ready flip, and inbound forge event.

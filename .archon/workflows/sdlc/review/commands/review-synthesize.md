@@ -13,6 +13,15 @@ There are two modes in `$ARTIFACTS_DIR/review/scope.md`:
 2. In full mode, read every current specialist report present in `$ARTIFACTS_DIR/review/` (`code.md`, `seams.md`, `simplify.md`, `tests.md`, `errors.md`, `docs.md`) in full.
 3. In continuation mode, read `$INPUTS.prior_report` in full before judging the delta. Also read `$ARTIFACTS_DIR/implementation.md` when it exists; it records what the correction claims to have changed and proved. Specialist files beside the report belong to the earlier round and are evidence only through the canonical prior report. Do not count them as freshly rerun lenses.
 4. Read every producer record under `$ARTIFACTS_DIR/discoveries/`, when that directory exists. Its absence means no producer recorded a discovery. Each file is independent evidence; never delete or replace these raw files.
+5. Independently inspect whether the exact reviewed diff has a user-visible UI
+   effect. If it does, verify `$ARTIFACTS_DIR/visual-evidence.json`, visually
+   inspect both PNGs, and confirm their revisions are the merge-base and reviewed
+   head with identical route, state, and viewport. Read the PR body back and
+   require two distinct, accessible GitHub-hosted image attachments under an
+   `archon-visual-evidence` marker for the reviewed head. Missing, after-only,
+   mismatched, stale, or inaccessible evidence is an Important finding with
+   `sources: [synthesize]`, even if no specialist reported it. If the UI has no
+   visible effect, record no screenshot requirement.
 
 In full mode, `code`, `seams`, `simplify`, and `tests` are required; `errors` and `docs` are required only when their inputs are true. A missing or empty report for an enabled lens means that lens failed to report and blocks readiness. In continuation mode, the prior report's review-coverage section is authoritative for the concerns the accepted review covered; do not reconstruct it from current optional inputs or simulate separate reviewers.
 
@@ -71,6 +80,10 @@ If the verdict requires `replan`, the consolidated artifacts must contain its pr
 ## Verdict
 
 `ready: true` exactly when there are no open Critical or Important findings and the required evidence for this mode is present. In full mode, an enabled lens with no report forces `ready: false` with the gap named. In continuation mode, a missing prior report or an unverifiable required correction forces `ready: false`; do not certify what you could not inspect.
+
+Required before/after UI evidence is included in "required evidence": a UI
+change cannot be ready while that evidence or its verified PR attachments are
+missing.
 
 Set `action` from that verdict and the accepted contract:
 

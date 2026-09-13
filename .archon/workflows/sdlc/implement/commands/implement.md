@@ -44,6 +44,40 @@ When the work or the request names a tracked item — an issue, a ticket, a docu
 11. Enforce invariants with the project's own strongest tools. Where the project is typed, express meaningful constraints in the type system rather than in comments or runtime convention, and avoid escape hatches such as `any` or unchecked casts when a sound type is practical.
 12. When the change touches agent or LLM behavior, let the model interpret and the code validate: never reconstruct intent from free prose with regexes or keyword matching — validate resolved arguments, permissions, and invariants at the tool boundary instead.
 
+## Visual evidence for UI changes
+
+Any change that alters a user-visible screen, component, layout, style, or
+interaction requires a real before/after comparison. This is part of the work,
+not optional PR decoration.
+
+1. Before editing the UI source, render the relevant route and state from the
+   starting revision recorded in `$ARTIFACTS_DIR/.start-sha`. For a repair of an
+   existing PR whose starting revision already contains the change, use the PR's
+   merge-base as the baseline. Run that revision in a separate temporary
+   worktree; never rewrite the active checkout to manufacture a baseline.
+2. Capture the result after the change at the same route, application state,
+   viewport width, and viewport height. Use the project's real runtime and its
+   browser or screenshot tooling. A test-only DOM, newly written HTML stand-in,
+   or two post-change states do not count as before/after evidence.
+3. Save both PNG files under `$ARTIFACTS_DIR/visual/` and visually inspect both.
+   They must be readable and must depict the claimed state.
+4. Write `$ARTIFACTS_DIR/visual-evidence.json` with exactly this shape:
+
+   ```json
+   {
+     "version": 1,
+     "before": {"path": "/absolute/path/before.png", "sha": "40-character commit", "route": "/route", "state": "state description", "viewport": {"width": 1440, "height": 900}},
+     "after": {"path": "/absolute/path/after.png", "sha": "40-character commit", "route": "/route", "state": "same state description", "viewport": {"width": 1440, "height": 900}}
+   }
+   ```
+
+The paths must resolve inside `$ARTIFACTS_DIR/visual/`; the files must be
+non-empty PNGs; `before.sha` and `after.sha` must identify the revisions that
+were actually rendered; route, state, and viewport must match. Record the
+commands and visual result in `implementation.md`. If either revision cannot be
+rendered or inspected, declare `green: false` and name the blocker. Do not use
+after-only screenshots as a substitute.
+
 ## Preserve proved adjacent work
 
 Do not expand the requested change to fix adjacent defects or drift. When you prove useful work outside the accepted scope, preserve it without prescribing a solution: create `$ARTIFACTS_DIR/discoveries/implement.json` as a JSON array. Each record contains only `title`, `claim`, `evidence` (an array of concrete `file:line` facts or command results), `relation` (`adjacent` or `scope_conflict`), and `source_node` (`implement`). A scope conflict means the requested outcome appears to require crossing an explicit boundary; do not cross it yourself.
