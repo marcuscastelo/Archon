@@ -26,6 +26,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { getArchonHome, isDocker } from '@archon/paths';
 import { removeTempTree } from '@archon/paths/test-utils';
@@ -10304,22 +10305,110 @@ describe('workflowRunCommand — progress rendering', () => {
       expect(existsSync(receiptPath)).toBe(false);
     });
 
-    it('preserves both failures when the executor and receipt read throw', async () => {
-      setupWorkflowMocks();
-      const { executeWorkflow } = require('@archon/workflows/executor');
-      const executionError = new Error('executor exception');
-      const readError = new Error('receipt read unavailable');
-      (executeWorkflow as ReturnType<typeof mock>).mockRejectedValueOnce(executionError);
-      const workflowDb = require('@archon/core/db/workflows');
-      (workflowDb.getWorkflowRun as ReturnType<typeof mock>).mockRejectedValueOnce(readError);
-      const error: unknown = await workflowRunCommand('/test/path', 'plan', '', {
-        resultFile: receiptPath,
-      }).catch(error => error);
-      expect(error).toBeInstanceOf(AggregateError);
-      if (!(error instanceof AggregateError)) throw new Error('Expected both failures');
-      expect(error.errors).toEqual([executionError, readError]);
-      expect(existsSync(receiptPath)).toBe(false);
-    });
+    for (const executionKind of ['returned', 'thrown'] as const) {
+      for (const receiptKind of ['read', 'identity', 'write', 'rename'] as const) {
+        it(`preserves ${executionKind} execution and receipt ${receiptKind} failures through the CLI`, async () => {
+          setupWorkflowMocks();
+          const { executeWorkflow } = require('@archon/workflows/executor');
+          const workflowDb = require('@archon/core/db/workflows');
+          const executionError = new Error('executor exception');
+          const readError = new Error('receipt read unavailable');
+          if (executionKind === 'thrown') {
+            (executeWorkflow as ReturnType<typeof mock>).mockRejectedValueOnce(executionError);
+          } else {
+            (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
+              success: false,
+              workflowRunId: 'test-run-id',
+              error: executionError.message,
+            });
+          }
+          if (receiptKind === 'read') {
+            (workflowDb.getWorkflowRun as ReturnType<typeof mock>).mockRejectedValueOnce(readError);
+          } else {
+            (workflowDb.getWorkflowRun as ReturnType<typeof mock>).mockResolvedValueOnce(
+              receiptKind === 'identity'
+                ? null
+                : {
+                    id: 'test-run-id',
+                    workflow_name: 'plan',
+                    status: 'failed',
+                    outcome: null,
+                  }
+            );
+          }
+          const target =
+            receiptKind === 'write' ? join(receiptRoot, 'missing', 'result.json') : receiptPath;
+          if (receiptKind === 'rename') mkdirSync(target);
+          const error: unknown = await workflowRunCommand('/test/path', 'plan', '', {
+            resultFile: target,
+          }).catch(error => error);
+          expect(error).toBeInstanceOf(AggregateError);
+          if (!(error instanceof AggregateError)) throw new Error('Expected both failures');
+          expect(error.errors).toHaveLength(2);
+          const [executionMember, receiptMember]: unknown[] = error.errors;
+          if (!(executionMember instanceof Error) || !(receiptMember instanceof Error)) {
+            throw new Error('Expected constituent errors');
+          }
+          if (executionKind === 'thrown') expect(executionMember).toBe(executionError);
+          else expect(executionMember).toBeInstanceOf(WorkflowRunFailedError);
+          expect(executionMember.message).toContain(executionError.message);
+          if (receiptKind === 'read') expect(receiptMember).toBe(readError);
+          expect(resolveCliExitCode(error)).toBe(1);
+
+          // Replay the command's actual error through cli.ts in an isolated process.
+          // The real dispatcher, catch, stdout writer and exit drain own the output.
+          const preload = join(receiptRoot, 'cli-error.ts');
+          writeFileSync(
+            preload,
+            `import { mock } from 'bun:test';
+            mock.module(${JSON.stringify(join(import.meta.dir, 'workflow.ts'))}, () => ({
+              workflowRunCommand: async () => { throw new AggregateError(
+                ${JSON.stringify([executionMember.message, receiptMember.message])}.map(message => new Error(message)),
+                ${JSON.stringify(error.message)}
+              ); }
+            }));`
+          );
+          for (const json of [false, true]) {
+            const output = spawnSync(
+              process.execPath,
+              [
+                '--preload',
+                preload,
+                join(import.meta.dir, '..', 'cli.ts'),
+                'workflow',
+                'run',
+                'plan',
+                '--result-file',
+                target,
+                '--cwd',
+                resolve(import.meta.dir, '../../../..'),
+                ...(json ? ['--json'] : []),
+              ],
+              {
+                encoding: 'utf8',
+                env: {
+                  ...process.env,
+                  ARCHON_HOME: join(receiptRoot, 'home'),
+                  ARCHON_TELEMETRY_DISABLED: '1',
+                  DATABASE_URL: '',
+                },
+              }
+            );
+            expect(output.status).toBe(1);
+            if (json) {
+              expect(JSON.parse(output.stdout)).toEqual({ ok: false, error: error.message });
+            } else {
+              expect(output.stderr).toContain(`Error: ${error.message}`);
+            }
+            const rendered = json ? output.stdout : output.stderr;
+            expect(rendered).toContain(executionError.message);
+            // JSON escapes filesystem paths and quotes in platform error messages.
+            const message = json ? JSON.parse(output.stdout).error : rendered;
+            expect(message).toContain(receiptMember.message);
+          }
+        });
+      }
+    }
 
     it('fails on unreadable persisted identity without publishing a receipt', async () => {
       setupWorkflowMocks();

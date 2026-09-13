@@ -3364,10 +3364,19 @@ async function runWorkflowWithOwnedSource(
       }
       await writeWorkflowReceipt(options.resultFile, run);
     } catch (receiptError) {
-      if (executionFailure) {
+      const failure =
+        executionFailure ??
+        (result && !result.success
+          ? { error: new WorkflowRunFailedError(result.error, detachedProcessOwner) }
+          : undefined);
+      if (failure) {
+        const errors = [failure.error, receiptError];
+        const reasons = errors.map(error =>
+          error instanceof Error ? error.message : String(error)
+        );
         throw new AggregateError(
-          [executionFailure.error, receiptError],
-          'Workflow execution and receipt failed.'
+          errors,
+          `Workflow execution and receipt failed: ${reasons.join('; ')}`
         );
       }
       throw receiptError;
