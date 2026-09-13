@@ -44,18 +44,19 @@ inputs:
 
 # The returns node is what a composed dependency on this workflow resolves to,
 # and what a caller's binding of this workflow's output reads. Both must mean
-# "the delivery finished": the flip is the delivery's proof, where the pr
-# node's record exists from the moment of creation even when everything after
-# it dies. Returning the flip makes a failed flip block a composing caller's
-# terminal node, an earlier death hand it a null, and a success hand it the
-# read-back-verified URL — never a stale record presented as a delivery.
-# The deliberate cost: when the flip itself FAILS, the composing tail's
+# "the delivery finished": the post-ready result is the delivery's proof,
+# where the pr node's record exists from the moment of creation even when
+# everything after it dies. Returning the post-ready result makes a failed flip
+# or required ready-phase check block a composing caller's terminal node, an
+# earlier death hand it a null, and a success hand it the read-back-verified URL
+# — never a stale record presented as a delivery.
+# The deliberate cost: when the public tail FAILS, the composing tail's
 # terminal node is blocked, so its caveat and discovery surfacing is skipped
 # along with the false delivery claim — the operator gets the flip's own
 # error, which names the recovery. Truthful failure beats a lying report;
 # surfacing caveats on every failure path is terminal-result ownership the
 # engine is growing toward, not something each tail should hand-roll.
-returns: flip-ready
+returns: post-ready-result
 
 nodes:
   - id: impl
@@ -683,6 +684,15 @@ nodes:
           depends_on: [post-ready-probe]
     depends_on: [flip-ready]
 
+  # Preserve the return contract as one verified PR URL while moving its
+  # availability after the required ready-phase checks.
+  - id: post-ready-result
+    script: console.log(process.env.INPUTS_PR_URL ?? '')
+    runtime: bun
+    with:
+      pr_url: "$flip-ready.output"
+    depends_on: [post-ready-checks]
+
   # This tail's terminal report, like every other SDLC tail's (scripts/outcome.py).
   # flip-ready owns the one irreversible public action. The post-ready gate must
   # settle before the terminal report can expose the PR as delivered; composing
@@ -693,5 +703,5 @@ nodes:
     script: outcome
     runtime: uv
     with:
-      pr_url: "$flip-ready.output"
-    depends_on: [flip-ready, post-ready-checks]
+      pr_url: "$post-ready-result.output"
+    depends_on: [post-ready-result]

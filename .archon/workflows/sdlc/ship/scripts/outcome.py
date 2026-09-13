@@ -7,7 +7,7 @@ it opened.
 Bound inputs (`with:` bindings, canonical text in env):
 - INPUTS_ROUTE / INPUTS_SUMMARY / INPUTS_CONTRACT: triage's validated verdict.
   INPUTS_CONTRACT names a negative contract verdict in the advisory report.
-- INPUTS_DELIVERED: the flip's verified pull request URL deliver returned, or
+- INPUTS_DELIVERED: the post-ready gate's verified pull request URL, or
   "null" when the deliver branch was skipped (no_action, or an advisory stop
   upstream of the gates).
 - INPUTS_GATE_PASSED_{DIRECT,ROOTED,PLANNED}: the spend gates' outputs, "null"
@@ -23,13 +23,14 @@ import sys
 def delivered_url(delivered: str) -> tuple[str, str]:
     """The delivered pull request URL, or why the value cannot supply one.
 
-    `archon-deliver` returns its `flip-ready` node, so this text is the URL that
-    node printed after flipping the pull request ready and reading its state
-    back. That choice is load-bearing twice. The value is proof of the flip,
+    `archon-deliver` returns its `post-ready-result` node, so this text is the URL
+    exposed after the ready transition, state read-back, and every configured
+    ready-phase check. That choice is load-bearing twice. The value is proof of
+    the completed delivery tail,
     not of creation: a record written when the pull request was opened exists
     even when delivery dies afterwards, and reporting it as delivered announces
     a delivery that never finished. And a composed dependency on `deliver`
-    resolves to its returns node, so a failed flip blocks this node instead of
+    resolves to its returns node, so a failed flip or gate blocks this node instead of
     handing it a stale value, while an earlier death leaves the flip skipped
     and the bound value null - the caller's died-mid-flight branch.
 

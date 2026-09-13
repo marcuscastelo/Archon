@@ -1,12 +1,12 @@
 """The delivery tail's terminal report.
 
-flip-ready owns the one irreversible public action and prints the ready pull
-request's URL. This composes what the run's reader — usually an orchestrating
-agent — actually receives, which is that URL plus whatever the review recorded
-in the run's discovery sidecar.
+post-ready-result exposes flip-ready's verified URL only after every required
+ready-phase check passes. This composes what the run's reader — usually an
+orchestrating agent — actually receives, which is that URL plus whatever the
+review recorded in the run's discovery sidecar.
 
 Bound inputs (`with:` bindings, canonical text in env):
-- INPUTS_PR_URL: flip-ready's output, the ready pull request's URL.
+- INPUTS_PR_URL: post-ready-result's output, the ready pull request's URL.
 """
 
 import json
