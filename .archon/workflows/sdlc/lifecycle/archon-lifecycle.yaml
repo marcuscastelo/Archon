@@ -12,6 +12,11 @@ inputs:
       One issue or work order. Empty selects the oldest open issue in the
       origin repository that no earlier run has touched (no archon-* label and
       no open PR naming it); nothing found completes the run with nothing to do.
+  intake_label:
+    default: ''
+    description: >-
+      Optional exact issue label required for backlog intake. Empty accepts any
+      untouched issue. Ignored when target is explicit.
   publish:
     default: 'false'
     description: >-
@@ -55,6 +60,7 @@ nodes:
     mutates_checkout: false
     with:
       target: "$INPUTS.target"
+      intake_label: "$INPUTS.intake_label"
     output_format:
       type: object
       properties:
