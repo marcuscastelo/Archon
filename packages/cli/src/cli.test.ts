@@ -443,6 +443,7 @@ Options:
   --verbose, -v              Show debug-level output
   --json                     Output machine-readable JSON (list/status/get/wait/runs/approve/reject/respond/cancel/abandon/resume)
   --events                   For verbose JSON status/get: output raw event rows instead of node summaries
+  --result-file <path>       Atomically write a versioned foreground run receipt to this file
   --detach                   Run 'workflow run'/'approve'/'reject'/'respond'/'resume' in a detached background child (returns immediately)
   --all                      For 'workflow status/runs': list across all projects (ignore cwd scope)
   --status <status>          For 'workflow runs': filter to one status (running, completed, failed, ...)
@@ -1166,6 +1167,36 @@ describe('CLI argument parsing', () => {
       expect(values.merged).toBe(true);
       expect(values['include-closed']).toBe(true);
     });
+  });
+
+  it('dispatches --result-file to the foreground-only guard before workflow launch', async () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'archon-receipt-dispatch-'));
+    try {
+      const resultFile = join(scratch, 'receipt.json');
+      const result = spawnSync(
+        process.execPath,
+        [
+          CLI_ENTRY,
+          'workflow',
+          'run',
+          'missing',
+          '--detach',
+          '--result-file',
+          resultFile,
+          '--cwd',
+          repoRoot,
+        ],
+        {
+          env: { ...process.env, ARCHON_HOME: scratch, DATABASE_URL: '', LOG_LEVEL: 'silent' },
+          encoding: 'utf8',
+        }
+      );
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('--result-file cannot be combined with --detach');
+      expect(existsSync(resultFile)).toBe(false);
+    } finally {
+      await removeTempTree(scratch);
+    }
   });
 
   describe('--cwd flag', () => {

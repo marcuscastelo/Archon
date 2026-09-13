@@ -230,6 +230,10 @@ If the workflow's YAML declares keys the engine ignores, a warning naming each o
 
 Note that a real `run` emits a JSON payload **only** under `--detach`. Without it, `--json` suppresses logs but the command still prints human progress to stdout (`Running workflow: …`), so do not pipe a plain real `run --json` into a parser. The side-effect-free `--dry-run --json` mode below is the other exception: it emits exactly one complete trace document. See [Unknown keys](/guides/authoring-workflows/#unknown-keys-are-reported-not-rejected).
 
+Foreground callers can request an atomic machine receipt with `--result-file /private/invocation/result.json`. Its JSON schema is `{ "version": 1, "runId": string, "workflowName": string, "status": WorkflowRunStatus, "outcome": "succeeded" | "failed" | null }`. Identity, status, and outcome come from the native run record, never streamed text. A paused run is still paused; a completed run with a failed authored outcome still exits zero under the existing execution contract. The receipt does not prove delivery.
+
+Supply a fresh path in an existing private directory for each invocation. Relative paths resolve from the invoking process's directory, independently of `--cwd`. The CLI writes a private temporary file beside the destination and renames it atomically, replacing an existing file. A missing run, failed read, or failed write exits nonzero; startup failures may leave no receipt. Check both the exit code and the receipt. `--result-file` rejects `--detach` and `--dry-run` before launch. Normal stdout is unchanged.
+
 **Flags:**
 
 | Flag | Effect |

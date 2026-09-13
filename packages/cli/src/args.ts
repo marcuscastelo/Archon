@@ -12,6 +12,7 @@ export const cliArgOptions: CliArgOptions = {
   'from-branch': { type: 'string' },
   base: { type: 'string' },
   'workflow-source': { type: 'string' },
+  'result-file': { type: 'string' },
   'no-worktree': { type: 'boolean' },
   folder: { type: 'boolean' },
   container: { type: 'boolean' },

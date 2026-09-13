@@ -665,6 +665,11 @@ const orderedFlags: FlagHelp[] = [
     ],
   },
   {
+    spec: '--result-file <path>',
+    description: 'Atomically write a versioned foreground run receipt to this file',
+    owners: [{ command: 'workflow', subcommand: 'run' }],
+  },
+  {
     spec: '--detach',
     description:
       "Run 'workflow run'/'approve'/'reject'/'respond'/'resume' in a detached background child (returns immediately)",
@@ -1099,6 +1104,9 @@ async function main(): Promise<number> {
       if (resumeFlag) throw new Error(RESUME_RUN_CONFIG_CONFLICT);
     }
 
+    if (values['result-file'] !== undefined && (command !== 'workflow' || subcommand !== 'run')) {
+      return await fail(jsonFlag, '--result-file can only be used with workflow run.');
+    }
     const configOutsideRun = rejectConfigOutsideRun(command, subcommand, values.config);
     if (configOutsideRun) {
       console.error(configOutsideRun);
@@ -1467,6 +1475,7 @@ async function main(): Promise<number> {
               // resume between runs (they only resume within chat/REST, which reuse a
               // conversation). Pass the same id on each run to opt into cross-run resume.
               conversationId: values['conversation-id'] as string | undefined,
+              resultFile: values['result-file'] as string | undefined,
               detach: detachFlag,
               json: jsonFlag,
               dryRun: dryRunFlag,

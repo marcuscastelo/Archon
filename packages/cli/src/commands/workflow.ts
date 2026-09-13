@@ -2,6 +2,7 @@
  * Workflow command - list and run workflows
  */
 import { existsSync, readdirSync, type Dirent } from 'node:fs';
+import { writeWorkflowReceipt } from '../utils/workflow-receipt';
 import * as archonPaths from '@archon/paths';
 import {
   registerRepository,
@@ -318,6 +319,7 @@ export interface WorkflowRunOptions {
    * exactly one worktree/conversation is created. The child does all the work.
    */
   detach?: boolean;
+  resultFile?: string;
   /**
    * Emit a machine-readable JSON ack for the spawned child instead of human
    * text. Only meaningful together with `detach`: without `detach` a foreground
@@ -3109,6 +3111,7 @@ async function runWorkflowWithOwnedSource(
   // resolution; reuse that result rather than querying twice.
   const deps = createWorkflowDeps();
   let result: Awaited<ReturnType<typeof executeWorkflow>> | undefined;
+  let executionFailure: { error: unknown } | undefined;
   // A genuine container-teardown failure captured in the finally, rethrown AFTER
   // the finally when the run itself succeeded — so a leaked privileged container
   // fails the CLI instead of reporting success + exit 0.
@@ -3239,6 +3242,8 @@ async function runWorkflowWithOwnedSource(
       conversation.id,
       opts
     );
+  } catch (error) {
+    executionFailure = { error };
   } finally {
     await closeRunLiveOwner();
     unsubscribe();
@@ -3347,6 +3352,29 @@ async function runWorkflowWithOwnedSource(
     }
   }
 
+  if (options.resultFile !== undefined) {
+    try {
+      const runId = result ? result.workflowRunId : ownedRunId;
+      if (!runId) throw new Error('Cannot write workflow receipt: executor returned no run ID.');
+      const run = await workflowDb.getWorkflowRun(runId);
+      if (run?.id !== runId || run.workflow_name !== workflow.name) {
+        throw new Error(
+          `Cannot write workflow receipt: persisted run ${runId} is missing or mismatched.`
+        );
+      }
+      await writeWorkflowReceipt(options.resultFile, run);
+    } catch (receiptError) {
+      if (executionFailure) {
+        throw new AggregateError(
+          [executionFailure.error, receiptError],
+          'Workflow execution and receipt failed.'
+        );
+      }
+      throw receiptError;
+    }
+  }
+  if (executionFailure) throw executionFailure.error;
+
   // A container teardown failure on an otherwise-SUCCESSFUL run must fail the CLI
   // (non-zero exit) — a leaked privileged container is not a success. On a failed
   // run the workflow-failed error below already exits non-zero (the leak was
@@ -3356,9 +3384,6 @@ async function runWorkflowWithOwnedSource(
   }
 
   if (!result) {
-    // executeWorkflow threw and it was re-thrown out of the try; this line is
-    // unreachable in practice (the throw propagates), but it satisfies the
-    // narrowing for the terminal-result checks below.
     throw new Error('Workflow did not produce a result.');
   }
 
@@ -3435,6 +3460,13 @@ export async function workflowRunCommand(
   userMessage: string,
   options: WorkflowRunOptions = {}
 ): Promise<void> {
+  if (options.resultFile !== undefined) {
+    if (!options.resultFile.trim()) throw new Error('--result-file requires a non-empty path.');
+    if (options.detach || options.detachedRunId) {
+      throw new Error('--result-file cannot be combined with --detach.');
+    }
+    if (options.dryRun) throw new Error('--result-file cannot be combined with --dry-run.');
+  }
   try {
     await withCapturedSource(owner =>
       runWorkflowWithOwnedSource(owner, cwd, workflowName, userMessage, options)

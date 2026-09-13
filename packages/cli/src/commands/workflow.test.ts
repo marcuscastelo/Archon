@@ -20,6 +20,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   truncateSync,
   writeFileSync,
@@ -10181,6 +10182,206 @@ describe('workflowRunCommand — progress rendering', () => {
   afterEach(() => {
     consoleSpy.mockRestore();
     stderrSpy.mockRestore();
+  });
+
+  describe('--result-file', () => {
+    let receiptRoot: string;
+    let receiptPath: string;
+    const runId = 'cb88a6b7-5417-44b4-a211-45a6cd1d8efa';
+
+    beforeEach(() => {
+      receiptRoot = mkdtempSync(join(tmpdir(), 'archon-receipt-'));
+      receiptPath = join(receiptRoot, 'result.json');
+    });
+    afterEach(async () => {
+      await removeTempTree(receiptRoot);
+    });
+
+    function prepareReceipt(
+      execution: OutcomeExecutionResult,
+      status: string,
+      outcome: string | null
+    ): void {
+      setupWorkflowMocks();
+      const { executeWorkflow } = require('@archon/workflows/executor');
+      const workflowDb = require('@archon/core/db/workflows');
+      (executeWorkflow as ReturnType<typeof mock>).mockImplementationOnce(() => {
+        console.log(
+          'Workflow completed successfully. {"runId":"foreign-run","status":"completed"} https://github.com/other/repo/pull/123'
+        );
+        return Promise.resolve(execution);
+      });
+      (workflowDb.getWorkflowRun as ReturnType<typeof mock>).mockResolvedValueOnce({
+        id: runId,
+        workflow_name: 'plan',
+        status,
+        outcome,
+      });
+    }
+
+    for (const status of ['completed', 'paused', 'failed'] as const) {
+      for (const outcome of [null, 'succeeded', 'failed'] as const) {
+        it(`writes exact native identity for ${status} with outcome ${outcome}`, async () => {
+          const execution: OutcomeExecutionResult =
+            status === 'failed'
+              ? { success: false, workflowRunId: runId, error: 'node failed' }
+              : {
+                  success: true,
+                  workflowRunId: runId,
+                  ...(status === 'paused' ? { paused: true } : {}),
+                };
+          prepareReceipt(execution, status, outcome);
+          const error = await workflowRunCommand('/test/path', 'plan', 'hello', {
+            resultFile: receiptPath,
+          }).catch(error => error);
+          if (status === 'failed') expect(resolveCliExitCode(error)).toBe(1);
+          else expect(error).toBeUndefined();
+          expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toEqual({
+            version: 1,
+            runId,
+            workflowName: 'plan',
+            status,
+            outcome,
+          });
+          expect(readdirSync(receiptRoot)).toEqual(['result.json']);
+        });
+      }
+    }
+
+    it('writes the owned failed run when the executor throws after persistence', async () => {
+      setupWorkflowMocks();
+      const { executeWorkflow } = require('@archon/workflows/executor');
+      (executeWorkflow as ReturnType<typeof mock>).mockRejectedValueOnce(
+        new Error('executor exception')
+      );
+      const workflowDb = require('@archon/core/db/workflows');
+      (workflowDb.getWorkflowRun as ReturnType<typeof mock>).mockResolvedValueOnce({
+        id: 'test-run-id',
+        workflow_name: 'plan',
+        status: 'failed',
+        outcome: null,
+      });
+      await expect(
+        workflowRunCommand('/test/path', 'plan', '', { resultFile: receiptPath })
+      ).rejects.toThrow('executor exception');
+      expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toEqual({
+        version: 1,
+        runId: 'test-run-id',
+        workflowName: 'plan',
+        status: 'failed',
+        outcome: null,
+      });
+    });
+
+    for (const persisted of [
+      null,
+      { id: 'foreign', workflow_name: 'plan' },
+      { id: runId, workflow_name: 'foreign' },
+    ]) {
+      it(`refuses a missing or mismatched native row ${JSON.stringify(persisted)}`, async () => {
+        setupWorkflowMocks();
+        const { executeWorkflow } = require('@archon/workflows/executor');
+        (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
+          success: true,
+          workflowRunId: runId,
+        });
+        const workflowDb = require('@archon/core/db/workflows');
+        (workflowDb.getWorkflowRun as ReturnType<typeof mock>).mockResolvedValueOnce(persisted);
+        await expect(
+          workflowRunCommand('/test/path', 'plan', '', { resultFile: receiptPath })
+        ).rejects.toThrow('missing or mismatched');
+        expect(existsSync(receiptPath)).toBe(false);
+      });
+    }
+
+    it('refuses an executor result without identity', async () => {
+      setupWorkflowMocks();
+      const { executeWorkflow } = require('@archon/workflows/executor');
+      (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({ success: true });
+      await expect(
+        workflowRunCommand('/test/path', 'plan', '', { resultFile: receiptPath })
+      ).rejects.toThrow('executor returned no run ID');
+      expect(existsSync(receiptPath)).toBe(false);
+    });
+
+    it('preserves both failures when the executor and receipt read throw', async () => {
+      setupWorkflowMocks();
+      const { executeWorkflow } = require('@archon/workflows/executor');
+      const executionError = new Error('executor exception');
+      const readError = new Error('receipt read unavailable');
+      (executeWorkflow as ReturnType<typeof mock>).mockRejectedValueOnce(executionError);
+      const workflowDb = require('@archon/core/db/workflows');
+      (workflowDb.getWorkflowRun as ReturnType<typeof mock>).mockRejectedValueOnce(readError);
+      const error: unknown = await workflowRunCommand('/test/path', 'plan', '', {
+        resultFile: receiptPath,
+      }).catch(error => error);
+      expect(error).toBeInstanceOf(AggregateError);
+      if (!(error instanceof AggregateError)) throw new Error('Expected both failures');
+      expect(error.errors).toEqual([executionError, readError]);
+      expect(existsSync(receiptPath)).toBe(false);
+    });
+
+    it('fails on unreadable persisted identity without publishing a receipt', async () => {
+      setupWorkflowMocks();
+      const { executeWorkflow } = require('@archon/workflows/executor');
+      (executeWorkflow as ReturnType<typeof mock>).mockResolvedValueOnce({
+        success: true,
+        workflowRunId: runId,
+      });
+      const workflowDb = require('@archon/core/db/workflows');
+      (workflowDb.getWorkflowRun as ReturnType<typeof mock>).mockRejectedValueOnce(
+        new Error('read unavailable')
+      );
+      await expect(
+        workflowRunCommand('/test/path', 'plan', '', { resultFile: receiptPath })
+      ).rejects.toThrow('read unavailable');
+      expect(existsSync(receiptPath)).toBe(false);
+    });
+
+    it('fails atomic publication without replacing the destination or leaving a temporary file', async () => {
+      prepareReceipt({ success: true, workflowRunId: runId }, 'completed', null);
+      mkdirSync(receiptPath);
+      writeFileSync(join(receiptPath, 'preserved'), 'original');
+      await expect(
+        workflowRunCommand('/test/path', 'plan', '', { resultFile: receiptPath })
+      ).rejects.toThrow();
+      expect(readFileSync(join(receiptPath, 'preserved'), 'utf8')).toBe('original');
+      expect(readdirSync(receiptRoot)).toEqual(['result.json']);
+    });
+
+    it('fails a write to a missing parent without publishing a receipt', async () => {
+      prepareReceipt({ success: true, workflowRunId: runId }, 'completed', null);
+      await expect(
+        workflowRunCommand('/test/path', 'plan', '', {
+          resultFile: join(receiptRoot, 'missing', 'result.json'),
+        })
+      ).rejects.toThrow();
+      expect(readdirSync(receiptRoot)).toEqual([]);
+    });
+
+    it('does not fabricate a receipt on startup failure', async () => {
+      const discoverMock = require('@archon/workflows/workflow-discovery')
+        .discoverWorkflowsWithConfig as ReturnType<typeof mock>;
+      discoverMock.mockResolvedValueOnce({ workflows: [], errors: [] });
+      await expect(
+        workflowRunCommand('/test/path', 'missing', '', { resultFile: receiptPath })
+      ).rejects.toThrow();
+      expect(existsSync(receiptPath)).toBe(false);
+    });
+
+    for (const incompatible of [{ detach: true }, { dryRun: true }]) {
+      it(`rejects ${JSON.stringify(incompatible)} before capturing source or launching`, async () => {
+        const { withCapturedSource, executeWorkflow } = require('@archon/workflows/executor');
+        const captures = withCapturedSource.mock.calls.length;
+        const executions = executeWorkflow.mock.calls.length;
+        await expect(
+          workflowRunCommand('/test/path', 'plan', '', { ...incompatible, resultFile: receiptPath })
+        ).rejects.toThrow('--result-file cannot be combined');
+        expect(withCapturedSource.mock.calls.length).toBe(captures);
+        expect(executeWorkflow.mock.calls.length).toBe(executions);
+        expect(existsSync(receiptPath)).toBe(false);
+      });
+    }
   });
 
   it('renders aligned completed execution and succeeded authored outcome', async () => {
