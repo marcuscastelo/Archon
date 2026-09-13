@@ -33,11 +33,16 @@ Otherwise determine the base branch from evidence, in order: the repository's do
 - If `$ARTIFACTS_DIR/red-causes.json` exists, this branch is being delivered while a project check is red. Add a short, plainly-titled section near the top of the body giving each record's cause and the evidence for it from `implementation.md`, and say that the PR's own CI is the check that still decides. A reviewer must not have to discover this from a red badge.
 - If `$ARTIFACTS_DIR/visual-evidence.json` exists, parse it and verify its exact
   schema, both absolute paths, PNG signatures, non-empty files, 40-character
-  SHAs, and identical route, state, and viewport. Both paths must resolve under
+  SHAs, version 2, existing-project `runtime_command` values, `capture_url`
+  values, and identical route, state, and viewport. Both paths must resolve under
   `$ARTIFACTS_DIR/visual/`; refuse traversal or symlinks that escape it. Add a
   `Visual evidence` section carrying
   `<!-- archon-visual-evidence head=<after.sha> -->`, the before/after revision,
-  route, state, and viewport. The image uploads themselves happen in step 4.
+  route, state, viewport, runtime commands, and capture URLs. Inspect both images
+  before upload. Refuse a component harness, Storybook story, test fixture,
+  synthetic page, or image missing the recognizable complete product page.
+  Importing production components or CSS into a stand-in does not make it
+  product evidence. The image uploads themselves happen in step 4.
 - If you write the body to a file, put it under `$ARTIFACTS_DIR/` — never inside the repository.
 
 ## 4. Push and create

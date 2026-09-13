@@ -24,8 +24,13 @@ interaction, require `$ARTIFACTS_DIR/visual-evidence.json` and verify it against
 the actual merge-base and reviewed head. Both referenced PNGs must exist under
 `$ARTIFACTS_DIR/visual/`, be readable, and depict the same route, application
 state, and viewport before and after. Inspect both images. A post-change state
-shown twice, two different states, a test-only stand-in, a local path not
-uploaded to the PR, or evidence for a different head is an Important defect.
+shown twice, two different states, a component harness, Storybook story, test
+fixture, synthetic page, a local path not uploaded to the PR, or evidence for a
+different head is an Important defect. Importing a real component and its CSS
+into a one-off page still fails this gate. Confirm the recorded runtime command
+is an existing project command that starts the complete application and that
+both screenshots contain the recognizable complete product page and surrounding
+layout.
 The smallest correction is to render the merge-base in a separate temporary
 worktree, render the reviewed head under identical conditions, and attach both
 verified files to the PR. When the diff has no user-visible UI effect, this

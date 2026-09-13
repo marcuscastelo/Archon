@@ -57,26 +57,35 @@ not optional PR decoration.
    worktree; never rewrite the active checkout to manufacture a baseline.
 2. Capture the result after the change at the same route, application state,
    viewport width, and viewport height. Use the project's real runtime and its
-   browser or screenshot tooling. A test-only DOM, newly written HTML stand-in,
-   or two post-change states do not count as before/after evidence.
+   browser or screenshot tooling. The normal application entrypoint must render
+   the complete product page. A component harness, Storybook story, test fixture,
+   synthetic HTML, or one-off page created for the run is not product evidence,
+   even when it imports the real component and CSS. A helper may provision auth,
+   data, or network access only when it does not create, replace, restyle, or
+   rearrange product DOM. Two post-change states do not count as before/after.
 3. Save both PNG files under `$ARTIFACTS_DIR/visual/` and visually inspect both.
    They must be readable and must depict the claimed state.
 4. Write `$ARTIFACTS_DIR/visual-evidence.json` with exactly this shape:
 
    ```json
    {
-     "version": 1,
-     "before": {"path": "/absolute/path/before.png", "sha": "40-character commit", "route": "/route", "state": "state description", "viewport": {"width": 1440, "height": 900}},
-     "after": {"path": "/absolute/path/after.png", "sha": "40-character commit", "route": "/route", "state": "same state description", "viewport": {"width": 1440, "height": 900}}
+     "version": 2,
+     "before": {"path": "/absolute/path/before.png", "sha": "40-character commit", "route": "/route", "state": "state description", "viewport": {"width": 1440, "height": 900}, "runtime_command": "existing project command that started the full app", "capture_url": "http://host/route"},
+     "after": {"path": "/absolute/path/after.png", "sha": "40-character commit", "route": "/route", "state": "same state description", "viewport": {"width": 1440, "height": 900}, "runtime_command": "same existing project command", "capture_url": "http://host/route"}
    }
    ```
 
 The paths must resolve inside `$ARTIFACTS_DIR/visual/`; the files must be
 non-empty PNGs; `before.sha` and `after.sha` must identify the revisions that
 were actually rendered; route, state, and viewport must match. Record the
-commands and visual result in `implementation.md`. If either revision cannot be
-rendered or inspected, declare `green: false` and name the blocker. Do not use
-after-only screenshots as a substitute.
+commands and visual result in `implementation.md`. `runtime_command` must resolve
+to a command already owned by the project and start its complete application;
+it cannot point at scratch source written during the run. Before accepting each
+PNG, compare it with the product's normal page or existing product screenshots
+and reject it if the application shell, typography, theme, or surrounding layout
+is missing. If either revision cannot be rendered or inspected, declare
+`green: false` and name the blocker. Do not use after-only screenshots or a
+visual approximation as a substitute.
 
 ## Preserve proved adjacent work
 

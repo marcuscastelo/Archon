@@ -16,7 +16,11 @@ There are two modes in `$ARTIFACTS_DIR/review/scope.md`:
 5. Independently inspect whether the exact reviewed diff has a user-visible UI
    effect. If it does, verify `$ARTIFACTS_DIR/visual-evidence.json`, visually
    inspect both PNGs, and confirm their revisions are the merge-base and reviewed
-   head with identical route, state, and viewport. Read the PR body back and
+   head with identical route, state, and viewport. Confirm both were rendered by
+   the complete application through an existing project runtime command. A
+   component harness, Storybook story, test fixture, synthetic page, or image
+   missing the recognizable complete product page is not evidence, even if it
+   imports production components and CSS. Read the PR body back and
    require two distinct, accessible GitHub-hosted image attachments under an
    `archon-visual-evidence` marker for the reviewed head. Missing, after-only,
    mismatched, stale, or inaccessible evidence is an Important finding with

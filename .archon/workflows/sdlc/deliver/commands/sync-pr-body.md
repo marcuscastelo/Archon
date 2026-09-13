@@ -36,7 +36,11 @@ recorded number as the selector for every `gh` read or edit.
    corrections.
 6. If `$ARTIFACTS_DIR/visual-evidence.json` exists, apply the same validation,
    attachment, and read-back contract as the `archon-pr` command: validate both
-   baseline/current PNGs and matching route, state, and viewport; replace any
+   baseline/current PNGs, version 2 runtime commands and capture URLs, and
+   matching route, state, and viewport. Reject component harnesses, Storybook
+   stories, test fixtures, synthetic pages, or screenshots without the
+   recognizable complete product page, even when they import production code;
+   replace any
    older `<!-- archon-visual-evidence ... -->` section; upload both files with
    `gh pr edit --attach`; then download both GitHub-hosted URLs and verify their
    SHA-256 digests match the local files. A correction that changes the PR head
